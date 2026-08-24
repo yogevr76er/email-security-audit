@@ -10,7 +10,7 @@ Usage:
 
 Examples:
     python parse_dmarc.py ~/Downloads
-    python parse_dmarc.py report.zip another.xml.gz --known-ip 185.60.168.164
+    python parse_dmarc.py report.zip another.xml.gz --known-ip 198.51.100.10
 """
 import sys
 import os
