@@ -1,6 +1,6 @@
 ---
 name: email-security-audit
-description: Use when auditing or fixing a domain's email authentication (SPF, DKIM, DMARC) — someone is sending mail as / spoofing a domain, you are setting up anti-spoofing, mail lands in spam, or you need to read DMARC aggregate (rua) report files (.xml/.zip/.gz). Covers checking records, producing exact DNS fixes, the none→quarantine→reject rollout, and telling spoofers from legitimate forwarders in reports.
+description: Use when auditing or fixing a domain's email authentication (SPF, DKIM, DMARC) — someone is sending mail as / spoofing a domain, you are setting up anti-spoofing, mail lands in spam, you need to read DMARC aggregate (rua) report files (.xml/.zip/.gz), or you are guiding a non-technical person through fixing it themselves (who may not even know where their DNS is managed). Covers checking records, producing exact DNS fixes, the none→quarantine→reject rollout, telling spoofers from legitimate forwarders, and step-by-step platform-specific setup.
 ---
 
 # Email Security Audit (SPF / DKIM / DMARC)
@@ -58,6 +58,57 @@ python scripts/parse_dmarc.py <files-or-folder> [--known-ip <your-server-ip>]
 - **Foreign IP + DKIM fail + SPF fail** → a **spoofer**. If DMARC is active, `disposition` = quarantine/reject means it was blocked. 🚨
 - **Foreign IP + DKIM pass (d=your-domain)** → **NOT** a spoofer. Legitimate forwarding, or an authorized partner/service — a spoofer cannot forge your DKIM signature. Confirm you recognize the source.
 - SPF may `pass` for a different envelope domain yet fail *alignment* (e.g. envelope = your host's domain). Normal for some server/forwarded mail; DKIM covers it.
+
+## Mode 3 — Guided fix (walk a non-technical owner through it themselves)
+
+The whole point: replace "call your IT person" with "do it yourself, guided." **You are the IT consultant who owns the whole thing end to end** — discovery, the fix, the gradual rollout, and the days of report-reading that follow — not a one-shot answer. Go slow, **one question per message**, explain *why* before *how*, and never assume the person knows what DNS, a record, or a nameserver is.
+
+### Step 0 — Find where their DNS actually lives (most people have no idea)
+Do not ask "where do you edit your DNS?" cold — many owners genuinely don't know. Discover it for them from the **nameservers**:
+`Resolve-DnsName -Type NS <domain> -Server 8.8.8.8` · `dig +short NS <domain> @8.8.8.8`
+
+| Nameserver looks like | DNS is managed at |
+|-----------------------|-------------------|
+| `*.cloudflare.com` | Cloudflare |
+| `ns-cloud-*.googledomains.com` | Google Cloud DNS |
+| `*.domaincontrol.com` | GoDaddy |
+| `*.registrar-servers.com` | Namecheap |
+| `ns*.wixdns.net` | Wix |
+| a web host's NS (e.g. `*.livedns.co.il`) | that host's cPanel |
+
+Then confirm in plain language: "Where did you buy the domain?" · "Who built or hosts your website?" · "Do you log in anywhere to manage the site?" The MX record also names the mail provider (Google Workspace, Microsoft 365, or the host itself).
+
+Order: run the NS lookup **first** and infer the provider yourself, then confirm with the person. Only fall back to leading with the plain-language questions when you can't run a lookup (no DNS access, or the domain isn't resolving yet).
+
+### Step 1 — Ask the two questions that decide everything (one at a time)
+1. Where the DNS is edited (from Step 0).
+2. Where mail is sent from as this domain — website/cPanel server, Google Workspace, Microsoft 365, a bulk sender, or several. This decides what SPF must include and whether `-all` is safe.
+
+### Step 2 — Give click-by-click steps for THEIR platform
+
+| Platform | Where to add a TXT record |
+|----------|---------------------------|
+| cPanel | Zone Editor → Manage (next to the domain) → Add Record → type **TXT** |
+| Cloudflare | DNS → Records → Add record → type **TXT** |
+| GoDaddy / Namecheap / registrar | DNS management / Advanced DNS → Add → **TXT** |
+| Wix | Domains → your domain → DNS records |
+| Google Workspace (to enable DKIM) | Admin console → Apps → Google Workspace → Gmail → Authenticate email |
+| Microsoft 365 | admin.microsoft.com → Settings → Domains → DNS |
+
+Pre-empt the #1 confusion: a name starting with `_` (like `_dmarc`) must be a **TXT** record — never A or CNAME. In cPanel, picking "A" throws an "underscore not allowed" error.
+
+### Step 3 — Walk the gradual rollout; never let them jump to reject
+`p=none` (listen ~1 week, confirm their real mail passes) → `p=quarantine` → `p=reject`. Explain what each stage does before they save it. Jumping straight to reject can silently block their own mail.
+
+### Step 4 — If they're scared, reassure BEFORE fixing
+Many arrive because of a spoofing/sextortion email that appears to come from themselves. First, calm them: it is not a hack, nobody accessed the account, the From address was merely forged, and the "we recorded you" threat is an empty mass-scam. A calm person can follow steps; a panicked one cannot. Then fix.
+
+### Step 5 — Stay with them through the daily reports (most guides quit here — don't)
+Set the expectation up front: once `rua` is set, a report arrives **roughly once a day** from each provider (Google, Microsoft…) as an .xml/.zip/.gz attachment. This is normal status, not an alarm — every provider that received mail "from" the domain files one, even when everything is fine.
+
+Offer to read each report *with* them: point Mode 2's parser at it and translate the output into plain language — "this is all you, you're clean," or "here's an unknown sender that was blocked." Don't leave them staring at raw XML.
+
+The reports are what drive the rollout — they are not decoration. Only move `none → quarantine → reject` once about a week of reports confirms every legitimate sender passes. Once it's stable at reject, remove `rua` to switch the daily emails off. That full arc — from "where does my DNS live?" to the day you turn the reports off — is the job.
 
 ## Common mistakes
 - Jumping to `p=reject` without the none→quarantine monitoring window → blocks your own mail silently.
