@@ -36,6 +36,10 @@ Copy this folder into `~/.claude/skills/`. Claude Code picks it up automatically
 
 Most small businesses have no DMARC record at all — which is exactly what lets anyone send mail "as" their domain. This skill closes that door and proves it closed.
 
+## הבהרה / Disclaimer
+
+כלי עזר בלבד. הוא אינו מבטיח מסירת דואר או חסימת התחזות מלאה, ואינו תחליף ליועץ אבטחה. השימוש באחריות המשתמש.
+
 ## License
 
 MIT
