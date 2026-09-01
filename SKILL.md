@@ -110,12 +110,28 @@ Offer to read each report *with* them: point Mode 2's parser at it and translate
 
 The reports are what drive the rollout — they are not decoration. Only move `none → quarantine → reject` once about a week of reports confirms every legitimate sender passes. Once it's stable at reject, remove `rua` to switch the daily emails off. That full arc — from "where does my DNS live?" to the day you turn the reports off — is the job.
 
+## "I still get it myself, even after reject"
+
+A common, confusing follow-up: the reports show spoofers rejected, yet the owner still finds the forged mail in their **own** inbox. This is expected, not a failure — separate the two goals:
+
+- **DMARC is enforced by the *receiving* server.** Gmail, Outlook.com, and any DMARC-respecting host obey your `reject`, so your customers, suppliers, and the outside world never see the forgery. That is the whole point, and it is working — the reports prove it.
+- **But the owner's own inbox often sits on a server that doesn't enforce DMARC on inbound mail** (many cPanel / shared hosts don't check it by default). A forgery sent *from you, to you* lands on that server and slips into the inbox, even while the rest of the world rejects it.
+
+So: DMARC protects **who receives mail in your name** (reputation). Cleaning **your own inbox** is a separate, local step.
+
+**To stop the owner seeing it — filter on authentication failure, NEVER on `From`.**
+A rule like "From contains me → Junk" also junks the legitimate mail the owner sends to themselves. Instead, filter on the auth result: real self-sent mail leaves the owner's own server and passes SPF+DKIM aligned; the forgery arrives from outside and fails. **First read the forged message's Internet headers** to see exactly which header the server writes (`Authentication-Results`, `Received-SPF`), then match the failure (e.g. `dmarc=fail`) — that catches only the forgery. Note that SPF alone can `pass` for the spoofer's *own* envelope domain, so match DMARC/alignment failure, not bare `spf=fail`.
+
+The fuller fix is enabling DMARC enforcement on the inbound server itself (server / WHM level), where available.
+
 ## Common mistakes
 - Jumping to `p=reject` without the none→quarantine monitoring window → blocks your own mail silently.
 - Treating a foreign IP with DKIM=pass as an attacker → it is forwarding/authorized; the valid DKIM proves it.
 - Removing `rua` too early → you lose the visibility that confirms the rollout is safe.
 - Auditing against the local resolver (cached) instead of a public one → you see stale records.
 - Hardening SPF to `-all` while forgetting a legitimate sender (Google Workspace, a CRM, a partner) → their mail fails. Confirm all real senders from the reports first.
+- Filtering your own inbox by `From` (= your own address) instead of by authentication result → also junks the mail you legitimately send to yourself. Match the auth-failure header instead.
+- Assuming `reject` cleans your own inbox → it protects external recipients; your own server may not enforce DMARC on inbound mail. See "I still get it myself, even after reject" above.
 
 ## Real-world impact
 Deployed on a live domain under an active sextortion spoofing attack. Audit found DMARC entirely missing; rolled out none→quarantine→reject over ~2 weeks. Reports later caught a real spoofer (foreign IP, DKIM+SPF fail, disposition=quarantine — auto-blocked) while a legitimate partner forwarding mail (DKIM pass) kept flowing untouched.
